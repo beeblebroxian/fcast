@@ -134,10 +134,14 @@ jobs:
         echo "=== Available artifacts ==="
         find artifacts -type f | sort
         echo "=== Copying binaries ==="
-        # Find all files (not directories) and copy them
-        find artifacts -type f \( -executable -o -name "*.exe" \) | while read file; do
+        # Copy all files from artifact directories (these are the compiled binaries)
+        find artifacts -mindepth 2 -type f | while read file; do
           cp "$file" release-assets/
           echo "Copied: $file"
+          # Make sure Linux/macOS binaries are executable
+          if [[ ! "$file" =~ \.exe$ ]]; then
+            chmod +x "release-assets/$(basename "$file")"
+          fi
         done
         echo "=== Final release assets ==="
         ls -la release-assets/
@@ -181,16 +185,6 @@ jobs:
           chmod +x fcast-*
           ./fcast-* --help
           ```
-          
-          ### Installation:
-          You can also install via cargo:
-          ```bash
-          cargo install fcast
-          ```
-          
-          ---
-          
-          Full changelog and documentation available at: https://docs.fcast.org
         files: |
           release-assets/*
         draft: false
