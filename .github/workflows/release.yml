@@ -73,6 +73,21 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y pkg-config libssl-dev
+        # Install cross-compilation tools
+        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
+    - name: Configure cross-compilation
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        # Create .cargo/config.toml for proper linker configuration
+        mkdir -p .cargo
+        cat > .cargo/config.toml << 'EOF'
+        [target.aarch64-unknown-linux-gnu]
+        linker = "aarch64-linux-gnu-gcc"
+        
+        [target.armv7-unknown-linux-gnueabihf]
+        linker = "arm-linux-gnueabihf-gcc"
+        EOF
 
     - name: Build binary
       run: |
