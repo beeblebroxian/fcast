@@ -129,9 +129,10 @@ jobs:
       run: |
         mkdir -p release-assets
         echo "=== Available artifacts ==="
-        find artifacts -type f -name "*" | sort
+        find artifacts -type f | sort
         echo "=== Copying binaries ==="
-        find artifacts -type f -executable -o -name "*.exe" | while read file; do
+        # Find all files (not directories) and copy them
+        find artifacts -type f \( -executable -o -name "*.exe" \) | while read file; do
           cp "$file" release-assets/
           echo "Copied: $file"
         done
