@@ -142,21 +142,15 @@ jobs:
         echo "=== Final release assets ==="
         ls -la release-assets/
 
-    - name: Get code version and generate build number
+    - name: Get version from tag
       id: version
       run: |
-        # Extract version from Cargo.toml
-        CODE_VERSION=$(grep '^version = ' senders/terminal/Cargo.toml | sed 's/version = "//; s/"//')
-        echo "Code version: $CODE_VERSION"
-        
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           # For manual builds, use provided version
           VERSION="${{ github.event.inputs.version }}"
         else
-          # For tag builds, use code version + build suffix based on timestamp
-          # Use last 2 digits of timestamp to keep it short
-          BUILD_NUM=$(date +%s | tail -c 3)
-          VERSION="${CODE_VERSION}b${BUILD_NUM}"
+          # For tag builds, extract version from tag name (remove 'v' prefix)
+          VERSION="${GITHUB_REF#refs/tags/v}"
         fi
         
         echo "version=$VERSION" >> $GITHUB_OUTPUT
