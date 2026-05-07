@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -139,14 +142,23 @@ jobs:
         echo "=== Final release assets ==="
         ls -la release-assets/
 
-    - name: Generate version
+    - name: Get code version and generate build number
       id: version
       run: |
+        # Extract version from Cargo.toml
+        CODE_VERSION=$(grep '^version = ' senders/terminal/Cargo.toml | sed 's/version = "//; s/"//')
+        echo "Code version: $CODE_VERSION"
+        
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          # For manual builds, use provided version
           VERSION="${{ github.event.inputs.version }}"
         else
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          # For tag builds, use code version + build suffix based on timestamp
+          # Use last 2 digits of timestamp to keep it short
+          BUILD_NUM=$(date +%s | tail -c 3)
+          VERSION="${CODE_VERSION}b${BUILD_NUM}"
         fi
+        
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Release version: $VERSION"
 
