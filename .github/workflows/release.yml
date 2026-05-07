@@ -1,0 +1,171 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: fcast.exe
+            asset_name: fcast-windows-x86_64.exe
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact_name: fcast.exe
+            asset_name: fcast-windows-aarch64.exe
+          # Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: fcast
+            asset_name: fcast-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: fcast
+            asset_name: fcast-linux-aarch64
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            artifact_name: fcast
+            asset_name: fcast-linux-armv7
+          # macOS
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: fcast
+            asset_name: fcast-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: fcast
+            asset_name: fcast-macos-aarch64
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Rust Cache
+      uses: swatinem/rust-cache@v2
+      with:
+        workspaces: senders/terminal
+
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Build binary
+      run: |
+        cargo build --release --target ${{ matrix.target }} --package fcast
+
+    - name: Prepare binary
+      shell: bash
+      run: |
+        mkdir -p dist
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
+        else
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
+          chmod +x dist/${{ matrix.asset_name }}
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}
+        path: dist/${{ matrix.asset_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        find artifacts -type f -executable -o -name "*.exe" | while read file; do
+          cp "$file" release-assets/
+        done
+        ls -la release-assets/
+
+    - name: Generate version
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/v}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Release version: $VERSION"
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        name: FCast Terminal ${{ steps.version.outputs.version }}
+        body: |
+          ## FCast Terminal ${{ steps.version.outputs.version }}
+          
+          This release includes pre-compiled binaries for the FCast terminal sender across multiple platforms and architectures.
+          
+          ### Available Binaries:
+          - **Windows x86_64**: `fcast-windows-x86_64.exe`
+          - **Windows ARM64**: `fcast-windows-aarch64.exe`
+          - **Linux x86_64**: `fcast-linux-x86_64`
+          - **Linux ARM64**: `fcast-linux-aarch64`
+          - **Linux ARMv7**: `fcast-linux-armv7`
+          - **macOS x86_64**: `fcast-macos-x86_64`
+          - **macOS ARM64**: `fcast-macos-aarch64`
+          
+          ### Usage:
+          Download the appropriate binary for your system and make it executable (on Unix-like systems):
+          ```bash
+          chmod +x fcast-*
+          ./fcast-* --help
+          ```
+          
+          ### Installation:
+          You can also install via cargo:
+          ```bash
+          cargo install fcast
+          ```
+          
+          ---
+          
+          Full changelog and documentation available at: https://docs.fcast.org
+        files: |
+          release-assets/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
